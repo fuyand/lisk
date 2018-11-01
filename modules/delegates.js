@@ -39,6 +39,7 @@ __private.loaded = false;
 __private.keypairs = {};
 __private.tmpKeypairs = {};
 __private.forgeInterval = 1000;
+__private.delegateLists = {};
 
 /**
  * Main delegates methods. Initializes library with scope content and generates a Delegate instance.
@@ -96,6 +97,33 @@ class Delegates {
 		setImmediate(cb, null, self);
 	}
 }
+
+/**
+ * Caches delegate list for last 2 rounds.
+ *
+ * @private
+ * @param {number} roundNo - Round Number
+ * @param {array} list - Delegate list
+ * @returns {Void}
+ */
+__private.cacheDelegateList = function(roundNo, list) {
+	if (!__private.delegateLists[roundNo]) {
+		__private.delegateLists[roundNo] = list;
+
+		/** We want to cache delegates for only last 2 rounds and get rid of old ones */
+
+		// sort round numbers in descending order so we can easily get most recent 2 rounds.
+		const roundNumbers = Object.keys(__private.delegateLists).sort(
+			(a, b) => b - a
+		);
+		if (roundNumbers.length > 2) {
+			// delete all round cache except last two rounds.
+			for (let i = 2; i < roundNumbers.length; i++) {
+				delete __private.delegateLists[roundNumbers[i]];
+			}
+		}
+	}
+};
 
 /**
  * Gets delegate public keys sorted by vote descending.
@@ -696,6 +724,10 @@ Delegates.prototype.generateDelegateList = function(round, source, cb, tx) {
 	// Set default function for getting delegates
 	source = source || __private.getKeysSortByVote;
 
+	if (__private.delegateLists[round]) {
+		return setImmediate(cb, null, __private.delegateLists[round]);
+	}
+
 	source((err, truncDelegateList) => {
 		if (err) {
 			return setImmediate(cb, err);
@@ -720,6 +752,7 @@ Delegates.prototype.generateDelegateList = function(round, source, cb, tx) {
 				.digest();
 		}
 
+		__private.cacheDelegateList(round, truncDelegateList);
 		return setImmediate(cb, null, truncDelegateList);
 	}, tx);
 };
